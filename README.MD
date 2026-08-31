@@ -1,6 +1,8 @@
 # ⚡ Cyberpunk Vending Machine
 
-FM‑2814 · Future Mart is a fully browser‑based, single‑page 3D demo of an interactive cyberpunk vending machine. Built as one standalone HTML file using Three.js from CDN, it blends scene setup, UI, animation, and purchase logic into a compact, futuristic experience.
+![Demo screenshot](main.png)
+
+FM‑2814 · Future Mart is a fully browser‑based, single‑page 3D demo of an interactive cyberpunk vending machine. Built as one standalone HTML file using Three.js from CDN, it blends scene se[...]
 
 ## ✨ Features
 
