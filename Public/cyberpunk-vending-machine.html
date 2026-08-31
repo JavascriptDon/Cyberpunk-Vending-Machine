@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FM-2814 · Future Mart</title>
+<link href="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADP19P+z9fT/8/X0/8RfcH/AVmP/wJZj/8CWY//EX3B/8/X0//P19P/AAAAAAAAAAAAAAAAAAAAAAAAAADP19OlDHnA/hFmm/8LYZf/Bl2S/wJZj/8CWY//AlmP/wJZj/8CWY//EX3B/8/X0/8AAAAAAAAAAAAAAAAAAAAAFn/C/yl7r/8bb6T/Fmug/xBmm/8LYZf/BlyS/wJZj/8CWY//AlmP/wJZj/8AAAAAAAAAAAAAAAAAAAAAAAAAADCCtv9Il8n/Jnmt/yB0qP/Iycn/gcjc/xBmm/+rrq3/BlyS/wJZj/8CWY//AlmP/wAAAAAAAAAAAAAAAAAAAAA7i77/Ya3e/zCCtf8rfbH/JXmt/yB0qP8bb6T/y83N/xBlm/8LYZb/BVyS/wJZj/8AAAAAAAAAAAAAAAAAAAAARZXH/2656f87i77/NYe6/zCCtf/z8vT/8/L0/yB0qP8bb6P/FWqf/xBlm/8DWpD/AAAAAAAAAAAAAAAAAAAAAP///wFuuen/RZXH/0CQwv/z8vT/NYa6/zCCtf8qfbH/JXis/yBzqP8ab6P/EX7E/wAAAAAAAAAAAAAAAAAAAAAAAAAAVaPU/2656f9Kmcv/RZTH//Py9P/z8vT/9vL0/4jO4v8qfbH/EWab/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABuuen/VaPU/0+ez/9Kmcv/RZTH/z+Qwv86i77/NYa5/xF9wf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEX3B/1+s3f9ap9j/VaLU/0+ez/+utLH/QHGP/yt+sv8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABqteX/ZLDh/1+s3f9ap9j/tr26/xF9wf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKasqv+BhoT/hYmH/7a9uv8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABuuen/brnp/2Wx4v8RfcH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA9jsD/brnp/2656f9uuen/RZXH/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVap//ZLDg/2Sw4P89jsD/crzr/z+Pwv8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARfcH/EX3B/xB+w/9uuen/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4AcAAMADAADABwAAwAMAAMADAADAAwAA4AMAAOAHAADwBwAA8A8AAPgfAAD8PwAA/D8AAPg/AADwPwAA/D8AAA==" rel="icon" type="image/x-icon">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #ffffff; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 16px; left: 16px; user-select: none;
+    font: 13px/1.5 "Courier New", monospace; letter-spacing: 0.08em;
+  }
+  .chip {
+    display: inline-block; background: #0d1620; color: #7ee7ff;
+    border: 1px solid #2de9ff55; border-radius: 4px;
+    padding: 8px 14px; margin-right: 8px;
+    box-shadow: 0 0 12px #2de9ff33;
+  }
+  #addCash {
+    cursor: pointer; color: #ff8ac2; border-color: #ff2d9555;
+    box-shadow: 0 0 12px #ff2d9533; transition: transform .1s;
+  }
+  #addCash:active { transform: scale(0.95); }
+  #toast {
+    position: fixed; top: 68px; left: 16px; max-width: 300px;
+    font: 12px/1.5 "Courier New", monospace; letter-spacing: 0.06em;
+    color: #0d1620; background: #7ee7ffee; border-radius: 4px;
+    padding: 8px 12px; opacity: 0; transition: opacity .25s; pointer-events: none;
+  }
+  #hint {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    font: 12px/1.4 "Courier New", monospace; letter-spacing: 0.12em;
+    color: #b8b8b8; user-select: none; pointer-events: none; text-align: center;
+  }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span class="chip">CREDIT <b id="bal">¥1000</b></span><span class="chip" id="addCash">+ INSERT ¥500</span>
+</div>
+<div id="toast"></div>
+<div id="hint">drag to orbit · scroll to zoom · click a product, then tap the glowing CARD pad to buy</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100);
+
+// ---------- lights ----------
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 0.85);
+key.position.set(5, 8, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -4; key.shadow.camera.right = 4;
+key.shadow.camera.top = 6;  key.shadow.camera.bottom = -2;
+key.shadow.radius = 6;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xdfe8ff, 0.35);
+fill.position.set(-6, 4, -4);
+scene.add(fill);
+
+const pinkGlow = new THREE.PointLight(0xff2d95, 1.4, 6);
+pinkGlow.position.set(0, 3.35, 0.8);
+scene.add(pinkGlow);
+const cyanGlow = new THREE.PointLight(0x2de9ff, 1.0, 5);
+cyanGlow.position.set(0.9, 1.6, 0.8);
+scene.add(cyanGlow);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity: 0.18 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ---------- texture helpers ----------
+function canvasTex(w, h, draw) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 8;
+  return t;
+}
+
+function weather(ctx, w, h, base, rustAmt) {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 900 * rustAmt; i++) {
+    const r = Math.random() * 14 + 2;
+    ctx.fillStyle = `rgba(${120 + Math.random() * 60 | 0},${40 + Math.random() * 30 | 0},${25 + Math.random() * 15 | 0},${Math.random() * 0.16})`;
+    ctx.beginPath();
+    ctx.arc(Math.random() * w, Math.random() * h, r, 0, 7);
+    ctx.fill();
+  }
+  for (let i = 0; i < 260; i++) {
+    ctx.fillStyle = `rgba(10,8,8,${Math.random() * 0.10})`;
+    ctx.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 2, 20 + Math.random() * 90);
+  }
+  for (let i = 0; i < 90; i++) {
+    ctx.strokeStyle = `rgba(200,200,205,${Math.random() * 0.10})`;
+    ctx.lineWidth = 1;
+    const x = Math.random() * w, y = Math.random() * h;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    ctx.lineTo(x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 60);
+    ctx.stroke();
+  }
+}
+
+const bodyTex = canvasTex(1024, 1024, (ctx, w, h) => {
+  weather(ctx, w, h, "#3a2e2c", 1.0);
+  for (let i = 0; i < 60; i++) {
+    ctx.fillStyle = `rgba(122,32,54,${Math.random() * 0.25})`;
+    ctx.fillRect(Math.random() * w, h * 0.55 + Math.random() * h * 0.4, 30 + Math.random() * 120, 20 + Math.random() * 80);
+  }
+  ctx.save(); ctx.translate(w * 0.62, h * 0.86); ctx.rotate(-0.12);
+  ctx.font = "bold 92px 'Comic Sans MS', cursive";
+  ctx.strokeStyle = "rgba(220,220,230,0.55)"; ctx.lineWidth = 5;
+  ctx.strokeText("NEOX", 0, 0); ctx.restore();
+  ctx.save(); ctx.translate(w * 0.1, h * 0.94); ctx.rotate(0.05);
+  ctx.font = "bold 54px 'Comic Sans MS', cursive";
+  ctx.fillStyle = "rgba(216,60,220,0.5)";
+  ctx.fillText("NEON", 0, 0); ctx.restore();
+});
+
+const sideTex = canvasTex(512, 1024, (ctx, w, h) => weather(ctx, w, h, "#332a29", 1.2));
+const darkTex = canvasTex(512, 512, (ctx, w, h) => weather(ctx, w, h, "#221c1c", 0.8));
+
+const bodyMat = new THREE.MeshStandardMaterial({ map: bodyTex, roughness: 0.85, metalness: 0.55 });
+const sideMat = new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.9, metalness: 0.5 });
+const darkMat = new THREE.MeshStandardMaterial({ map: darkTex, roughness: 0.8, metalness: 0.6 });
+const trimMat = new THREE.MeshStandardMaterial({ color: 0x1b1517, roughness: 0.6, metalness: 0.8 });
+
+function neonTex(lines, colors, w, h, fonts) {
+  return canvasTex(w, h, (ctx) => {
+    weather(ctx, w, h, "#17090f", 0.3);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const step = h / (lines.length + 0.4);
+    lines.forEach((txt, i) => {
+      const col = colors[i % colors.length];
+      ctx.font = fonts[i] || fonts[0];
+      ctx.shadowColor = col; ctx.shadowBlur = 26;
+      ctx.fillStyle = col;
+      const y = step * (i + 0.75);
+      ctx.fillText(txt, w / 2, y);
+      ctx.fillText(txt, w / 2, y);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#fff"; ctx.globalAlpha = 0.85;
+      ctx.fillText(txt, w / 2, y);
+      ctx.globalAlpha = 1;
+    });
+  });
+}
+
+function emissivePlate(tex, wd, ht, dp, color) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(wd, ht, dp),
+    [trimMat, trimMat, trimMat, trimMat,
+     new THREE.MeshStandardMaterial({ map: tex, emissive: color, emissiveMap: tex, emissiveIntensity: 1.6, roughness: 0.4 }),
+     trimMat]
+  );
+  m.castShadow = true;
+  return m;
+}
+
+// ---------- machine ----------
+const machine = new THREE.Group();
+scene.add(machine);
+
+const W = 2.1, H = 3.6, D = 1.0;
+
+const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), [sideMat, sideMat, darkMat, darkMat, bodyMat, sideMat]);
+body.position.y = H / 2 + 0.12;
+body.castShadow = true;
+machine.add(body);
+
+for (const [x, z] of [[-0.85, -0.35], [0.85, -0.35], [-0.85, 0.35], [0.85, 0.35]]) {
+  const f = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.22), trimMat);
+  f.position.set(x, 0.07, z);
+  f.castShadow = true;
+  machine.add(f);
+}
+
+const topSign = emissivePlate(
+  neonTex(["未来商店", "· FUTURE MART ·"], ["#ff2d95", "#7ee7ff"], 1024, 400, ["bold 170px sans-serif", "bold 92px sans-serif"]),
+  1.9, 0.72, 0.16, 0xffffff);
+topSign.position.set(-0.05, H + 0.18, 0.15);
+topSign.rotation.x = -0.05;
+machine.add(topSign);
+
+const topBox = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.5, 0.9), darkMat);
+topBox.position.set(0.68, H + 0.22, -0.05);
+topBox.castShadow = true;
+machine.add(topBox);
+
+const leftSign = emissivePlate(neonTex(["24", "時", "間", "営", "業"], ["#ff2d5e"], 256, 1024, ["bold 150px sans-serif"]), 0.42, 1.5, 0.1, 0xffffff);
+leftSign.position.set(-W / 2 - 0.24, 2.55, 0.2);
+leftSign.rotation.y = -0.35;
+machine.add(leftSign);
+
+const rightSign = emissivePlate(
+  neonTex(["サ", "イ", "バ", "ー", "飲", "料"], ["#ff2d95", "#ff2d95", "#ff2d95", "#ff2d95", "#7ee7ff", "#7ee7ff"], 256, 1024, ["bold 140px sans-serif"]),
+  0.42, 1.7, 0.1, 0xffffff);
+rightSign.position.set(W / 2 + 0.24, 2.5, 0.2);
+rightSign.rotation.y = 0.35;
+machine.add(rightSign);
+
+// ---- product window ----
+const winW = 1.15, winH = 2.0;
+const winCX = -0.32, winCY = 2.35;
+
+const cavity = new THREE.Mesh(new THREE.BoxGeometry(winW, winH, 0.5), new THREE.MeshStandardMaterial({ color: 0x0a1016, roughness: 0.95 }));
+cavity.position.set(winCX, winCY, D / 2 - 0.24);
+machine.add(cavity);
+
+// ---------- PRODUCT CATALOG ----------
+// slot codes are row+col like A1..D5; type drives geometry (can / bottle / pouch)
+const CATALOG = [
+  [ // row A — sodas
+    { name: "NEON COLA",  jp: "ネオン",  price: 250, color: 0xcf2d6e, type: "can" },
+    { name: "VOLT",       jp: "電圧",    price: 280, color: 0x2de9ff, type: "can" },
+    { name: "静 WATER",   jp: "静",      price: 180, color: 0x9fd8e8, type: "bottle" },
+    { name: "PLASMA",     jp: "プラズマ", price: 300, color: 0xb03ad6, type: "can" },
+    { name: "RUST ALE",   jp: "錆",      price: 260, color: 0xd8862a, type: "can" },
+  ],
+  [ // row B — sodas
+    { name: "GLITCH POP", jp: "グリッチ", price: 240, color: 0x8a2be2, type: "can" },
+    { name: "ION TEA",    jp: "イオン茶", price: 220, color: 0x3a66d6, type: "can" },
+    { name: "ZERO-G",     jp: "無重力",  price: 290, color: 0x555a66, type: "can" },
+    { name: "SAKURA FZZ", jp: "桜",      price: 270, color: 0xff8ac2, type: "can" },
+    { name: "ACID LIME",  jp: "酸",      price: 250, color: 0x66d63a, type: "can" },
+  ],
+  [ // row C — mixed
+    { name: "MOVA CHIPS", jp: "モバ",    price: 200, color: 0xd63a9e, type: "pouch" },
+    { name: "HWPC CHIPS", jp: "薯",      price: 200, color: 0xd8862a, type: "pouch" },
+    { name: "SYNTH COLA", jp: "合成",    price: 230, color: 0x6e2dcf, type: "can" },
+    { name: "BYTE BITES", jp: "一口",    price: 190, color: 0x2dcf9e, type: "pouch" },
+    { name: "DARK ROAST", jp: "黒",      price: 210, color: 0x4a3626, type: "can" },
+  ],
+  [ // row D — snacks
+    { name: "PIXEL PUFFS", jp: "画素",   price: 180, color: 0xe8c02d, type: "pouch" },
+    { name: "NORI CRSP",   jp: "海苔",   price: 190, color: 0x2d8a4e, type: "pouch" },
+    { name: "OCTO SNAX",   jp: "蛸",     price: 220, color: 0xd64a3a, type: "pouch" },
+    { name: "MECHA MIX",   jp: "メカ",   price: 210, color: 0x8a8f9e, type: "pouch" },
+    { name: "GHOST CRN",   jp: "幽霊",   price: 180, color: 0xcfd8e8, type: "pouch" },
+  ],
+];
+
+// label texture for a product (wraps a can / fronts a pouch)
+function labelTex(p) {
+  const col = "#" + p.color.toString(16).padStart(6, "0");
+  return canvasTex(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = col; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(0, h * 0.3, w, h * 0.42); // dark band
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 34px sans-serif";
+    ctx.shadowColor = col; ctx.shadowBlur = 8;
+    ctx.fillText(p.jp, w / 2, h * 0.46);
+    ctx.font = "bold 19px sans-serif";
+    ctx.fillText(p.name, w / 2, h * 0.62);
+    ctx.shadowBlur = 0;
+    // grime so it fits the weathered machine
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = `rgba(20,15,15,${Math.random() * 0.15})`;
+      ctx.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 6, 2 + Math.random() * 6);
+    }
+  });
+}
+
+function buildProductMesh(p) {
+  const tex = labelTex(p);
+  let mesh;
+  if (p.type === "can") {
+    mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.055, 0.055, 0.26, 16),
+      [new THREE.MeshStandardMaterial({ map: tex, roughness: 0.35, metalness: 0.6, emissive: p.color, emissiveIntensity: 0.12 }),
+       new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.9, roughness: 0.3 }),
+       new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9, roughness: 0.3 })]
+    );
+  } else if (p.type === "bottle") {
+    mesh = new THREE.Group();
+    const bod = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.05, 0.24, 14),
+      new THREE.MeshPhysicalMaterial({ map: tex, transparent: true, opacity: 0.85, roughness: 0.15, transmission: 0.3, emissive: p.color, emissiveIntensity: 0.2 })
+    );
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.04, 10), new THREE.MeshStandardMaterial({ color: 0x2de9ff, emissive: 0x2de9ff, emissiveIntensity: 0.5 }));
+    cap.position.y = 0.14;
+    bod.add(cap);
+    mesh.add(bod);
+  } else { // pouch
+    mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.15, 0.24, 0.05),
+      [darkMat, darkMat, darkMat, darkMat,
+       new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, emissive: p.color, emissiveIntensity: 0.1 }),
+       darkMat]
+    );
+    mesh.rotation.x = -0.1;
+  }
+  return mesh;
+}
+
+const shelfMat = new THREE.MeshStandardMaterial({ color: 0x14202a, roughness: 0.6, metalness: 0.7 });
+const clickables = []; // meshes the raycaster tests
+const slots = [];      // slot records: { product, mesh, button, home:Vector3, code }
+
+// per-slot glowing buy button below each product
+function slotButton(code) {
+  const tex = canvasTex(128, 64, (ctx, w, h) => {
+    ctx.fillStyle = "#07242c"; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#7ee7ff"; ctx.textAlign = "center";
+    ctx.font = "bold 40px monospace";
+    ctx.shadowColor = "#2de9ff"; ctx.shadowBlur = 10;
+    ctx.fillText(code, w / 2, 46);
+  });
+  return new THREE.Mesh(
+    new THREE.BoxGeometry(0.14, 0.06, 0.02),
+    [trimMat, trimMat, trimMat, trimMat,
+     new THREE.MeshStandardMaterial({ map: tex, emissive: 0x2de9ff, emissiveMap: tex, emissiveIntensity: 0.9, roughness: 0.4 }),
+     trimMat]
+  );
+}
+
+const ROWS = "ABCD";
+for (let row = 0; row < 4; row++) {
+  const y = winCY + 0.72 - row * 0.5;
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(winW - 0.06, 0.03, 0.34), shelfMat);
+  shelf.position.set(winCX, y - 0.17, D / 2 - 0.16);
+  machine.add(shelf);
+  for (let i = 0; i < 5; i++) {
+    const p = CATALOG[row][i];
+    const code = ROWS[row] + (i + 1);
+    const x = winCX - (winW - 0.26) / 2 + i * ((winW - 0.26) / 4);
+    const mesh = buildProductMesh(p);
+    mesh.position.set(x, y - 0.02, D / 2 - 0.16);
+    machine.add(mesh);
+    const btn = slotButton(code);
+    btn.position.set(x, y - 0.215, D / 2 + 0.02); // sits proud of the glass frame lip
+    machine.add(btn);
+    const slot = { product: p, mesh, button: btn, code, home: mesh.position.clone(), stock: 3 };
+    // clicking either the product or its code button selects the slot
+    mesh.traverse(o => { if (o.isMesh) { o.userData.slot = slot; clickables.push(o); } });
+    btn.userData.slot = slot;
+    clickables.push(btn);
+    slots.push(slot);
+  }
+}
+
+const glass = new THREE.Mesh(
+  new THREE.PlaneGeometry(winW, winH),
+  new THREE.MeshPhysicalMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.14, roughness: 0.08, metalness: 0, transmission: 0.6, side: THREE.DoubleSide })
+);
+glass.position.set(winCX, winCY, D / 2 + 0.005);
+machine.add(glass);
+
+const glassFrame = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.12, winH + 0.12, 0.05), trimMat);
+glassFrame.position.set(winCX, winCY, D / 2 - 0.02);
+machine.add(glassFrame);
+
+// ---- holographic display: dynamic canvas, redrawn on state changes ----
+const holoCanvas = document.createElement("canvas");
+holoCanvas.width = 256; holoCanvas.height = 560;
+const holoCtx = holoCanvas.getContext("2d");
+const holoContentTex = new THREE.CanvasTexture(holoCanvas);
+
+function drawHolo(state, data) {
+  const ctx = holoCtx, w = 256, h = 560;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#7ee7ff"; ctx.strokeStyle = "#7ee7ff";
+  ctx.textAlign = "center"; ctx.lineWidth = 2.5;
+  ctx.shadowColor = "#2de9ff"; ctx.shadowBlur = 12;
+  if (state === "welcome") {
+    ctx.font = "bold 26px sans-serif"; ctx.fillText("ようこそ", w / 2, 42);
+    ctx.font = "16px sans-serif";      ctx.fillText("WELCOME", w / 2, 66);
+    ctx.beginPath(); ctx.arc(w / 2, 150, 34, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(w / 2, 165, 26, 14, 0, Math.PI, 0); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(w / 2 - 55, 300); ctx.quadraticCurveTo(w / 2, 180, w / 2 + 55, 300);
+    ctx.lineTo(w / 2 + 62, 360); ctx.lineTo(w / 2 - 62, 360); ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w / 2 + 30, 230); ctx.quadraticCurveTo(w / 2 + 70, 180, w / 2 + 66, 140); ctx.stroke();
+    ctx.font = "bold 20px sans-serif"; ctx.fillText("商品を選択", w / 2, 408);
+    ctx.font = "13px sans-serif";      ctx.fillText("SELECT PRODUCT", w / 2, 428);
+    for (let i = 0; i < 4; i++) {
+      const x = w / 2 - 52 + (i % 2) * 60, y = 448 + ((i / 2) | 0) * 52;
+      ctx.strokeRect(x, y, 44, 42);
+    }
+  } else if (state === "selected") {
+    const p = data.product;
+    ctx.font = "bold 22px sans-serif"; ctx.fillText("選択済み", w / 2, 42);
+    ctx.font = "13px sans-serif";      ctx.fillText("SELECTED  [" + data.code + "]", w / 2, 64);
+    ctx.strokeRect(48, 90, 160, 160);
+    ctx.font = "bold 46px sans-serif"; ctx.fillText(p.jp, w / 2, 180);
+    ctx.font = "bold 20px sans-serif"; ctx.fillText(p.name, w / 2, 285);
+    ctx.font = "bold 40px sans-serif"; ctx.fillText("¥" + p.price, w / 2, 340);
+    ctx.font = "14px sans-serif";      ctx.fillText("STOCK: " + data.stock, w / 2, 372);
+    // pulse hint toward the card pad
+    ctx.font = "bold 19px sans-serif"; ctx.fillText("カードをタップ", w / 2, 460);
+    ctx.font = "13px sans-serif";      ctx.fillText("TAP CARD PAD TO PAY", w / 2, 482);
+    ctx.beginPath(); ctx.moveTo(w / 2, 500); ctx.lineTo(w / 2, 535);
+    ctx.lineTo(w / 2 - 10, 522); ctx.moveTo(w / 2, 535); ctx.lineTo(w / 2 + 10, 522); ctx.stroke();
+  } else if (state === "vending") {
+    ctx.font = "bold 26px sans-serif"; ctx.fillText("処理中…", w / 2, 250);
+    ctx.font = "15px sans-serif";      ctx.fillText("VENDING " + data.product.name, w / 2, 285);
+  } else if (state === "thanks") {
+    ctx.font = "bold 34px sans-serif"; ctx.fillText("ありがとう", w / 2, 260);
+    ctx.font = "16px sans-serif";      ctx.fillText("THANK YOU", w / 2, 294);
+    ctx.font = "13px sans-serif";      ctx.fillText("ENJOY YOUR PURCHASE", w / 2, 330);
+  } else if (state === "nofunds") {
+    ctx.fillStyle = "#ff5e8a"; ctx.shadowColor = "#ff2d5e";
+    ctx.font = "bold 26px sans-serif"; ctx.fillText("残高不足", w / 2, 240);
+    ctx.font = "15px sans-serif";      ctx.fillText("INSUFFICIENT CREDIT", w / 2, 270);
+    ctx.font = "13px sans-serif";      ctx.fillText("INSERT CASH (top left)", w / 2, 320);
+  } else if (state === "nostock") {
+    ctx.fillStyle = "#ffb02d"; ctx.shadowColor = "#ffaa22";
+    ctx.font = "bold 26px sans-serif"; ctx.fillText("売り切れ", w / 2, 240);
+    ctx.font = "15px sans-serif";      ctx.fillText("SOLD OUT", w / 2, 270);
+  }
+  holoContentTex.needsUpdate = true;
+}
+drawHolo("welcome");
+
+const holoPanelBack = new THREE.Mesh(
+  new THREE.BoxGeometry(0.62, 1.35, 0.06),
+  new THREE.MeshStandardMaterial({ color: 0x06121a, roughness: 0.4, emissive: 0x04333f, emissiveIntensity: 0.6 })
+);
+holoPanelBack.position.set(0.62, 2.6, D / 2 + 0.01);
+machine.add(holoPanelBack);
+
+const holoContent = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.56, 1.28),
+  new THREE.MeshBasicMaterial({ map: holoContentTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
+);
+holoContent.position.set(0.62, 2.6, D / 2 + 0.05);
+machine.add(holoContent);
+
+const holoUniforms = { uTime: { value: 0 } };
+const holoFx = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.58, 1.3),
+  new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, uniforms: holoUniforms,
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: `
+      varying vec2 vUv; uniform float uTime;
+      void main(){
+        float scan = 0.65 + 0.35*sin(vUv.y*240.0 + uTime*6.0);
+        float band = smoothstep(0.02,0.0,abs(fract(vUv.y-uTime*0.08)-0.5)-0.48);
+        float flicker = 0.9 + 0.1*sin(uTime*37.0)*sin(uTime*13.0);
+        float edge = smoothstep(0.0,0.06,vUv.x)*smoothstep(1.0,0.94,vUv.x);
+        gl_FragColor = vec4(vec3(0.18,0.9,1.0),(0.18*scan+0.5*band)*flicker*edge);
+      }`
+  })
+);
+holoFx.position.set(0.62, 2.6, D / 2 + 0.055);
+machine.add(holoFx);
+
+// ---- payment cluster ----
+const payLabel = emissivePlate(neonTex(["お支払い PAYMENT"], ["#7ee7ff"], 512, 96, ["bold 40px sans-serif"]), 0.6, 0.11, 0.03, 0xffffff);
+payLabel.position.set(0.62, 1.82, D / 2 + 0.02);
+machine.add(payLabel);
+
+const payPanel = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.06), darkMat);
+payPanel.position.set(0.62, 1.42, D / 2 + 0.01);
+machine.add(payPanel);
+
+const cardPadMat = new THREE.MeshStandardMaterial({ color: 0x0a2a33, emissive: 0x2de9ff, emissiveIntensity: 1.2, roughness: 0.3 });
+const cardPad = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.03), cardPadMat);
+cardPad.position.set(0.76, 1.52, D / 2 + 0.05);
+cardPad.userData.isPay = true;
+machine.add(cardPad);
+clickables.push(cardPad);
+
+const billSlot = new THREE.Mesh(
+  new THREE.BoxGeometry(0.24, 0.045, 0.03),
+  new THREE.MeshStandardMaterial({ color: 0x201404, emissive: 0xffaa22, emissiveIntensity: 1.1 })
+);
+billSlot.position.set(0.48, 1.56, D / 2 + 0.05);
+billSlot.userData.isCash = true;
+machine.add(billSlot);
+clickables.push(billSlot);
+
+const keyMat = new THREE.MeshStandardMaterial({ color: 0x111417, roughness: 0.4, metalness: 0.6, emissive: 0x113344, emissiveIntensity: 0.5 });
+for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+  const k = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.025), keyMat);
+  k.position.set(0.68 + (c - 1) * 0.085, 1.3 - r * 0.085, D / 2 + 0.045);
+  machine.add(k);
+}
+
+// ---- product showcase: rotating 3D carousel (replaces the pickup neon label) ----
+// outer frame — same footprint as the old pickup slot so the machine reads the same
+const showcaseFrame = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.6, 0.06), trimMat);
+showcaseFrame.position.set(-0.32, 0.85, D / 2 - 0.01);
+machine.add(showcaseFrame);
+
+// recessed dark cavity so the products have depth to spin in
+const showcaseCavity = new THREE.Mesh(
+  new THREE.BoxGeometry(1.24, 0.52, 0.28),
+  new THREE.MeshStandardMaterial({ color: 0x030a12, roughness: 0.9, emissive: 0x02222c, emissiveIntensity: 0.4 })
+);
+showcaseCavity.position.set(-0.32, 0.85, D / 2 - 0.14);
+machine.add(showcaseCavity);
+
+// turntable + featured products (a mix of sodas, a bottle, and chips)
+const showcase = new THREE.Group();
+showcase.position.set(-0.32, 0.72, D / 2 - 0.12);
+machine.add(showcase);
+
+const FEATURED = [
+  CATALOG[0][0], // NEON COLA
+  CATALOG[0][1], // VOLT
+  CATALOG[1][3], // SAKURA FZZ
+  CATALOG[2][0], // MOVA CHIPS
+  CATALOG[3][0], // PIXEL PUFFS
+  CATALOG[0][2], // 静 WATER (bottle for variety)
+];
+const showcaseItems = [];
+FEATURED.forEach((p, i) => {
+  const item = buildProductMesh(p);
+  const angle = (i / FEATURED.length) * Math.PI * 2;
+  // squashed ellipse: the cavity is much shallower (z) than wide (x)
+  item.position.set(Math.cos(angle) * 0.38, 0.12, Math.sin(angle) * 0.08);
+  item.scale.setScalar(0.72);
+  showcase.add(item);
+  showcaseItems.push(item);
+});
+
+// turntable disk with cyan rim glow — squashed vertically to hug the cavity floor
+const disk = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.44, 0.44, 0.02, 32),
+  new THREE.MeshStandardMaterial({ color: 0x0a2530, emissive: 0x2de9ff, emissiveIntensity: 0.7, roughness: 0.4, metalness: 0.7 })
+);
+disk.scale.z = 0.22;
+showcase.add(disk);
+
+// cyan uplight inside the cavity — flashes brighter when an item is being dispensed
+const showcaseLight = new THREE.PointLight(0x2de9ff, 0.9, 1.6);
+showcaseLight.position.set(-0.32, 0.9, D / 2 - 0.05);
+scene.add(showcaseLight);
+
+// tinted glass front — same physical material family as the shelves' glass
+const showcaseGlass = new THREE.Mesh(
+  new THREE.PlaneGeometry(1.22, 0.52),
+  new THREE.MeshPhysicalMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.14, roughness: 0.05, transmission: 0.65, side: THREE.DoubleSide })
+);
+showcaseGlass.position.set(-0.32, 0.85, D / 2 + 0.02);
+machine.add(showcaseGlass);
+
+// ---- pickup slot: black flap that opens to reveal the purchased product ----
+const pickupY = 0.34;
+const pickupW = 1.15, pickupH = 0.32, pickupDepth = 0.14;
+
+// dark interior chamber (proud of the body face — the flap opens outward to reveal it)
+const pickupInterior = new THREE.Mesh(
+  new THREE.BoxGeometry(pickupW, pickupH, pickupDepth),
+  new THREE.MeshStandardMaterial({ color: 0x030a12, roughness: 0.9, emissive: 0x022733, emissiveIntensity: 0.6 })
+);
+pickupInterior.position.set(-0.32, pickupY, D / 2 + pickupDepth / 2 + 0.005);
+machine.add(pickupInterior);
+
+// bezel around the opening
+const pickupBezel = new THREE.Mesh(new THREE.BoxGeometry(pickupW + 0.08, pickupH + 0.08, 0.03), trimMat);
+pickupBezel.position.set(-0.32, pickupY, D / 2 + pickupDepth + 0.02);
+machine.add(pickupBezel);
+
+// pedestal for the purchased product to sit on
+const pedestal = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.09, 0.11, 0.02, 20),
+  new THREE.MeshStandardMaterial({ color: 0x0a2530, emissive: 0x2de9ff, emissiveIntensity: 0.7, roughness: 0.4, metalness: 0.5 })
+);
+pedestal.position.set(-0.32, pickupY - pickupH / 2 + 0.02, D / 2 + pickupDepth * 0.5);
+machine.add(pedestal);
+
+// interior cyan light — off when flap is closed, brightens as it opens
+const pickupLight = new THREE.PointLight(0x2de9ff, 0.0, 1.2);
+pickupLight.position.set(-0.32, pickupY, D / 2 + pickupDepth);
+scene.add(pickupLight);
+
+// flap group — hinged at top edge so it swings outward like a mailbox door
+const flapHinge = new THREE.Group();
+flapHinge.position.set(-0.32, pickupY + pickupH / 2, D / 2 + pickupDepth + 0.05);
+machine.add(flapHinge);
+
+const flapTex = canvasTex(512, 160, (ctx, w, h) => {
+  weather(ctx, w, h, "#0a0a0e", 0.4);
+  // nested cyan trim lines
+  ctx.strokeStyle = "#2de9ff"; ctx.lineWidth = 3;
+  ctx.strokeRect(18, 18, w - 36, h - 36);
+  ctx.strokeStyle = "rgba(45, 233, 255, 0.35)"; ctx.lineWidth = 1.5;
+  ctx.strokeRect(28, 28, w - 56, h - 56);
+  // handle indent at bottom edge
+  ctx.fillStyle = "#040406";
+  ctx.fillRect(w / 2 - 95, h - 42, 190, 11);
+});
+
+const flap = new THREE.Mesh(
+  new THREE.BoxGeometry(pickupW, pickupH, 0.02),
+  new THREE.MeshStandardMaterial({ map: flapTex, roughness: 0.7, metalness: 0.5 })
+);
+flap.position.y = -pickupH / 2; // hinge sits at the flap's top edge
+flap.castShadow = true;
+flapHinge.add(flap);
+
+// flap state
+let purchasedProduct = null;
+let flapState = "closed"; // closed | opening | open | closing
+let flapTimer = 0;
+const FLAP_OPEN_ANGLE = -Math.PI * 0.5; // horizontal outward when fully open
+
+// ---- side module + sticker + cables + vents + id plate ----
+const cautionTex = canvasTex(256, 320, (ctx, w, h) => {
+  weather(ctx, w, h, "#2a2320", 0.9);
+  ctx.fillStyle = "#e8b300"; ctx.fillRect(18, 20, w - 36, 54);
+  ctx.fillStyle = "#111"; ctx.font = "bold 34px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("CAUTION", w / 2, 58);
+  ctx.strokeStyle = "#ddd"; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(w / 2, 150, 38, 0, 7); ctx.stroke();
+  ctx.fillStyle = "#ddd";
+  ctx.beginPath(); ctx.arc(w / 2 - 14, 145, 7, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(w / 2 + 14, 145, 7, 0, 7); ctx.fill();
+  ctx.fillRect(w / 2 - 3, 158, 6, 12);
+  ctx.font = "bold 44px sans-serif"; ctx.fillText("未来", w / 2, 260);
+});
+const sideModule = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.5, 0.85), darkMat);
+sideModule.position.set(W / 2 + 0.2, 1.15, -0.05);
+sideModule.castShadow = true;
+machine.add(sideModule);
+const sticker = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.44), new THREE.MeshStandardMaterial({ map: cautionTex, roughness: 0.9 }));
+sticker.rotation.y = Math.PI / 2;
+sticker.position.set(W / 2 + 0.46, 1.35, -0.05);
+machine.add(sticker);
+
+const cableMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.7 });
+function cable(points, r) {
+  const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p)));
+  const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, r, 8), cableMat);
+  m.castShadow = true;
+  machine.add(m);
+}
+cable([[0.95, 3.9, -0.1], [1.25, 3.5, 0.25], [1.18, 2.9, 0.3], [1.3, 2.3, 0.1], [1.22, 1.9, -0.1]], 0.045);
+cable([[0.8, 3.95, -0.2], [1.15, 3.6, 0.1], [1.32, 3.0, 0.05], [1.25, 2.4, 0.25], [1.3, 2.0, 0.0]], 0.03);
+cable([[0.7, 3.9, 0.1], [1.05, 3.4, 0.35], [1.28, 2.7, 0.2], [1.18, 2.1, 0.15]], 0.022);
+
+for (let i = 0; i < 5; i++) {
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.03, 0.7), trimMat);
+  fin.position.set(0.68, H + 0.06 + i * 0.075, -0.05);
+  machine.add(fin);
+}
+
+const idTex = canvasTex(512, 128, (ctx, w, h) => {
+  weather(ctx, w, h, "#1b232c", 0.5);
+  ctx.fillStyle = "#5fb6d9"; ctx.font = "bold 64px monospace"; ctx.textAlign = "center";
+  ctx.fillText("FM-2814", w / 2, 84);
+});
+const idPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.14), new THREE.MeshStandardMaterial({ map: idTex, roughness: 0.7 }));
+idPlate.position.set(0.62, 3.42, D / 2 + 0.011);
+machine.add(idPlate);
+
+// ---------- purchase state machine ----------
+let balance = 1000;
+let selected = null;     // current slot
+let busy = false;        // true while an item is dispensing
+const falling = [];      // { mesh, vy, phase, t }
+
+const balEl = document.getElementById("bal");
+const toastEl = document.getElementById("toast");
+let toastTimer;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.style.opacity = 1;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.style.opacity = 0, 2600);
+}
+function setBalance(v) { balance = v; balEl.textContent = "¥" + v; }
+
+document.getElementById("addCash").addEventListener("click", () => {
+  setBalance(balance + 500);
+  toast("¥500 inserted");
+});
+
+function select(slot) {
+  if (busy) return;
+  if (selected) selected.button.material[4].emissiveIntensity = 0.9; // un-highlight previous
+  selected = slot;
+  slot.button.material[4].emissiveIntensity = 2.2;
+  if (slot.stock <= 0) { drawHolo("nostock"); toast(slot.product.name + " — sold out"); return; }
+  drawHolo("selected", slot);
+  toast("Selected " + slot.product.name + " · ¥" + slot.product.price + " — tap the card pad to pay");
+}
+
+function pay() {
+  if (busy) return;
+  if (!selected) { toast("Pick a product first"); return; }
+  if (selected.stock <= 0) { drawHolo("nostock"); return; }
+  if (balance < selected.product.price) { drawHolo("nofunds"); toast("Not enough credit — insert cash (top left)"); return; }
+
+  busy = true;
+  setBalance(balance - selected.product.price);
+  selected.stock--;
+  drawHolo("vending", selected);
+
+  // detach the shelf mesh and let physics take it
+  const m = selected.mesh;
+  falling.push({ mesh: m, slot: selected, vy: 0, phase: "fall", t: 0 });
+  toast("Vending " + selected.product.name + "…");
+}
+
+// respawn a fresh unit on the shelf a moment after dispensing (if stock remains)
+function restock(slot) {
+  if (slot.stock <= 0) {
+    slot.button.material[4].emissiveIntensity = 0.25; // dim sold-out button
+    return;
+  }
+  setTimeout(() => {
+    const fresh = buildProductMesh(slot.product);
+    fresh.position.copy(slot.home);
+    machine.add(fresh);
+    slot.mesh = fresh;
+    fresh.traverse(o => { if (o.isMesh) { o.userData.slot = slot; clickables.push(o); } });
+  }, 1200);
+}
+
+// ---------- camera orbit ----------
+const target = new THREE.Vector3(0, 2.0, 0);
+let theta = 0.5, phi = 1.35, radius = 8.5;
+let dragging = false, moved = 0, px = 0, py = 0;
+let idle = true;
+
+function updateCam() {
+  camera.position.set(
+    target.x + radius * Math.sin(phi) * Math.sin(theta),
+    target.y + radius * Math.cos(phi),
+    target.z + radius * Math.sin(phi) * Math.cos(theta)
+  );
+  camera.lookAt(target);
+}
+
+const el = renderer.domElement;
+el.addEventListener("pointerdown", e => { dragging = true; moved = 0; idle = false; px = e.clientX; py = e.clientY; });
+addEventListener("pointermove", e => {
+  if (!dragging) return;
+  moved += Math.abs(e.clientX - px) + Math.abs(e.clientY - py);
+  theta -= (e.clientX - px) * 0.006;
+  phi = Math.min(1.65, Math.max(0.35, phi - (e.clientY - py) * 0.006));
+  px = e.clientX; py = e.clientY;
+});
+addEventListener("pointerup", e => {
+  dragging = false;
+  if (moved < 6) handleClick(e); // barely moved = a click, not a drag
+});
+el.addEventListener("wheel", e => {
+  e.preventDefault();
+  radius = Math.min(16, Math.max(4, radius + e.deltaY * 0.005));
+}, { passive: false });
+let pinch = 0;
+el.addEventListener("touchmove", e => {
+  if (e.touches.length === 2) {
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    if (pinch) radius = Math.min(16, Math.max(4, radius - (d - pinch) * 0.01));
+    pinch = d;
+  }
+}, { passive: true });
+el.addEventListener("touchend", () => pinch = 0);
+
+// ---------- click handling ----------
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+function handleClick(e) {
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(clickables, false);
+  if (!hits.length) return;
+  const obj = hits[0].object;
+  if (obj.userData.isPay) { pay(); return; }
+  if (obj.userData.isCash) { setBalance(balance + 500); toast("¥500 inserted"); return; }
+  if (obj.userData.slot) select(obj.userData.slot);
+}
+
+// ---------- animate ----------
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.getElapsedTime();
+
+  if (idle) theta += 0.0022;
+  updateCam();
+
+  holoUniforms.uTime.value = t;
+
+  const flick = 0.9 + 0.1 * Math.sin(t * 30) * Math.sin(t * 7.3) + (Math.random() < 0.012 ? -0.45 : 0);
+  pinkGlow.intensity = 1.4 * flick;
+  cyanGlow.intensity = 1.0 * (0.95 + 0.05 * Math.sin(t * 11));
+  topSign.material[4].emissiveIntensity = 1.6 * flick;
+  leftSign.material[4].emissiveIntensity = 1.4 * (0.9 + 0.1 * Math.sin(t * 17 + 2));
+  holoContent.material.opacity = 0.75 + 0.15 * Math.sin(t * 2.2);
+
+  // card pad breathes harder when a product is waiting for payment
+  cardPadMat.emissiveIntensity = selected && !busy
+    ? 1.6 + 0.9 * Math.sin(t * 6)
+    : 1.2;
+
+  // dispense physics: fall inside the cavity, thunk, slide out, fade
+  for (let i = falling.length - 1; i >= 0; i--) {
+    const f = falling[i];
+    if (f.phase === "fall") {
+      f.vy -= 9.8 * dt;
+      f.mesh.position.y += f.vy * dt;
+      f.mesh.rotation.z += 2.5 * dt; // tumble
+      if (f.mesh.position.y <= 1.42) {          // land at the bottom of the shelf cavity
+        f.mesh.position.y = 1.42;
+        f.phase = "thunk";
+        f.t = 0;
+        showcaseLight.intensity = 3.6;          // flash the showcase on dispense
+        drawHolo("thanks");
+        toast(f.slot.product.name + " dispensed ✓");
+        restock(f.slot);
+      }
+    } else if (f.phase === "thunk") {
+      f.t += dt;
+      // small bounce then fade out through the flap
+      f.mesh.position.z += 0.15 * dt;
+      f.mesh.scale.multiplyScalar(1 - 0.9 * dt);
+      if (f.t > 1.2) {
+        machine.remove(f.mesh);
+        falling.splice(i, 1);
+        // spawn the purchased product on the pedestal and open the flap to reveal it
+        const bought = buildProductMesh(f.slot.product);
+        bought.position.set(-0.32, pickupY - pickupH / 2 + 0.15, D / 2 + pickupDepth * 0.5);
+        bought.scale.setScalar(0.01); // starts tiny, scales up as flap opens
+        machine.add(bought);
+        purchasedProduct = bought;
+        flapState = "opening";
+        // busy stays true through the reveal — cleared when flap finishes closing
+      }
+    }
+  }
+  // spin the showcase turntable + each product on its own axis (varied speeds)
+  showcase.rotation.y += 0.45 * dt;
+  showcaseItems.forEach((m, i) => { m.rotation.y += (1.1 + i * 0.17) * dt; });
+  // dispense flash decays back to normal
+  showcaseLight.intensity += (0.9 - showcaseLight.intensity) * 2 * dt;
+
+  // flap state machine — opens after dispense, holds while product spins, then closes
+  if (flapState === "opening") {
+    flapHinge.rotation.x += (FLAP_OPEN_ANGLE - flapHinge.rotation.x) * 5 * dt;   // exponential ease
+    pickupLight.intensity = Math.min(1.6, pickupLight.intensity + 4 * dt);
+    if (purchasedProduct) {
+      // scale in sync with how open the flap is, so it appears to materialise as the flap swings out
+      const openness = flapHinge.rotation.x / FLAP_OPEN_ANGLE;
+      purchasedProduct.scale.setScalar(Math.min(0.95, openness * 0.95));
+    }
+    if (Math.abs(flapHinge.rotation.x - FLAP_OPEN_ANGLE) < 0.01) {
+      flapHinge.rotation.x = FLAP_OPEN_ANGLE;
+      flapState = "open";
+      flapTimer = 0;
+    }
+  } else if (flapState === "open") {
+    flapTimer += dt;
+    if (purchasedProduct) purchasedProduct.rotation.y += 1.1 * dt; // spin the reveal
+    if (flapTimer > 3.5) flapState = "closing";
+  } else if (flapState === "closing") {
+    flapHinge.rotation.x += (0 - flapHinge.rotation.x) * 4 * dt;
+    pickupLight.intensity = Math.max(0, pickupLight.intensity - 3 * dt);
+    if (purchasedProduct) {
+      const openness = flapHinge.rotation.x / FLAP_OPEN_ANGLE;
+      purchasedProduct.scale.setScalar(Math.max(0, openness * 0.95));
+    }
+    if (Math.abs(flapHinge.rotation.x) < 0.01) {
+      flapHinge.rotation.x = 0;
+      flapState = "closed";
+      if (purchasedProduct) { machine.remove(purchasedProduct); purchasedProduct = null; }
+      busy = false;
+      selected = null;
+      drawHolo("welcome");
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+updateCam();
+animate();
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
