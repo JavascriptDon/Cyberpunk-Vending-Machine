@@ -2,6 +2,7 @@
 
 `FM-2814 · Future Mart` is a browser-based single-page demo of an interactive 3D cyberpunk vending machine. The project is built as one standalone HTML file with Three.js loaded from CDN, combining scene setup, UI, animation, and purchase logic in a minimal static package.
 
+
 ## Features
 
 - Interactive 3D vending machine scene rendered with Three.js and WebGL
