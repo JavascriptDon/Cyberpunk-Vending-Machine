@@ -1,9 +1,8 @@
-# Cyberpunk Vending Machine
+# ⚡ Cyberpunk Vending Machine
 
-`FM-2814 · Future Mart` is a browser-based single-page demo of an interactive 3D cyberpunk vending machine. The project is built as one standalone HTML file with Three.js loaded from CDN, combining scene setup, UI, animation, and purchase logic in a minimal static package.
+FM‑2814 · Future Mart is a fully browser‑based, single‑page 3D demo of an interactive cyberpunk vending machine. Built as one standalone HTML file using Three.js from CDN, it blends scene setup, UI, animation, and purchase logic into a compact, futuristic experience.
 
-
-## Features
+## ✨ Features
 
 - Interactive 3D vending machine scene rendered with Three.js and WebGL
 - Drag-to-orbit and scroll or pinch zoom camera controls
@@ -26,14 +25,14 @@
 - Click the top-left `+ INSERT ¥500` control to add credit
 - Click the bill slot on the payment panel to add credit
 
-## Run Locally
+## 🏃 Run Locally
 
 No build step or package install is required.
 
 1. Open `cyberpunk-vending-machine.html` in a modern web browser.
 2. Make sure you have an internet connection, because Three.js is loaded from `cdnjs.cloudflare.com`.
 
-## Project Structure
+## 🗂️ Project Structure
 
 - `cyberpunk-vending-machine.html` contains the markup, styles, Three.js scene setup, state management, and animation loop
 - `README.MD` contains project documentation
@@ -46,6 +45,6 @@ No build step or package install is required.
 - Purchasing uses a small in-file state flow for selection, balance checks, vending, restocking, and sold-out handling
 - Rendering, lighting, materials, and animation all run directly in the browser through Three.js
 
-## License
+## 📜 License
 
 This project is licensed under the MIT License. See `LICENSE` for details.
